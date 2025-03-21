@@ -40,8 +40,8 @@ _start:
 	mov word [cont_config], 0
 	mov qword [cont_lineas], 0
 	mov qword [contador], 1
-	mov qword [cont_lineas1], 1
-	mov qword [cont_lineas2], 2
+	mov qword [cont_lineas1], 0
+	mov qword [cont_lineas2], 1
 	mov qword [long_lineas], 0
     ; Abrir, leer e imprimir el primer archivo (config.txt)
 
@@ -173,11 +173,15 @@ extraer_valor:
     	ret
 	
 buscar_corchete:
-    	mov r8w, word [cont_config]		;estamos usando 16 bits para buscar
+    	mov r8w, word [cont_config]		;estamos usando 16 bits para buscar+
+	cmp r8w, 1000
+	jge error
     	cmp byte [config + r8], '['		;comparo hasta encontrar corchete
     	je encontrado			;si lo encuentro tengo funcion de retorno
-    	inc qword [cont_config]		;si no se ha encontrado aumento contador
+    	inc word [cont_config]		;si no se ha encontrado aumento contador
     	jmp buscar_corchete			;loop
+error:
+	ret
 
 buscar_espacio:
     	mov r8w, [cont_config]		;misma logica de busqueda que buscar_corche nada mas
@@ -313,8 +317,8 @@ ordenamiento:	;r13 linea 1		r12 linea 2
 	mov rcx, r10
 	rep movsb
 
-	print notas	
-	print newline
+;	print notas	
+;	print newline
 	
 	mov r14, [long_lineas + r8]
 	mov r15, [long_lineas + r9]
@@ -322,8 +326,8 @@ ordenamiento:	;r13 linea 1		r12 linea 2
 	mov r10, [r14]
 	mov r11, [r15]
 cambio:
-	mov [r14], r11
-	mov [r15], r10
+	mov r14, [r11]
+	mov r15, [r10]
 
 	inc qword [cont_lineas1]			;para ver las otras lineas
 	inc qword [cont_lineas2]			;hay que seguir el loop
