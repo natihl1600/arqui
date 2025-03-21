@@ -1,0 +1,5 @@
+Nota de aprobacion: [43]
+Nota de reposicion: [90]
+Tamaño de los grupos de notas: [50]
+Escala del grafico: [40]
+Ordenamiento: alfabetico
