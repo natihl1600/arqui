@@ -1,11 +1,10 @@
 %include "linux64.inc"
 
 section .data
-;    	filename1 db "config.txt", 0   ; Nombre del primer archivo
- ;   	filename2 db "archivo.txt", 0  ; Nombre del segundo archivo
 	newline db 10, 0               ; Carácter de nueva línea
 	msg_error_abrir db "Error al abrir el archivo", 0
 	msg_error_leer db "Error al leer el archivo", 0
+	msg_arg_error db "Error en cantidad de argumentos", 0
 
 section .bss
     	config resb 1000               ; Buffer para almacenar el contenido del primer archivo
@@ -88,13 +87,13 @@ _start:
 	print newline
     print ordenamientos
 	print newline
-lineas:
+
 	call contar_lineas
 ;	print cont_config
 ;	print newline
 ;	movzx rax, word [cont_lineas]
 ;	print rax
-orden:
+
 	call ordenar_filas
 ;	print cont_lineas
 ;	print newline
@@ -102,6 +101,10 @@ orden:
 ;	print array
 
 	;final extraccion datos config
+	exit
+arg_error:
+	print msg_arg_error
+	print newline
 	exit
 
 abrir_leer_imprimir:
@@ -111,6 +114,8 @@ abrir_leer_imprimir:
     	mov rsi, 0              ; flags: O_RDONLY
     	mov rdx, 0              ; mode
     	syscall
+	cmp rax, 0
+	jl error_abrir
 
     ; Leer el archivo
     	mov rdi, rax            ; descriptor de archivo
@@ -118,7 +123,9 @@ abrir_leer_imprimir:
     	mov rsi, config        ; buffer para almacenar el contenido
     	mov rdx, 1000           ; número de bytes a leer
     	syscall
-	
+	cmp rax, 0
+	jl error_leer
+
     ; Cerrar el archivo
     	mov rax, 3              ; syscall: close
     	syscall
@@ -140,6 +147,8 @@ abrir_leer_imprimir2:
     	mov rsi, 0              ; flags: O_RDONLY
     	mov rdx, 0              ; mode
     	syscall
+	cmp rax, 0
+	jl error_abrir
 
     ; Leer el archivo
     	mov rdi, rax            ; descriptor de archivo
@@ -147,6 +156,8 @@ abrir_leer_imprimir2:
     	mov rsi, notas        ; buffer para almacenar el contenido
     	mov rdx, 1000           ; número de bytes a leer
     	syscall
+	cmp rax, 0
+	jl error_leer
 	mov r12, rax
 
     ; Cerrar el archivo
@@ -157,7 +168,16 @@ abrir_leer_imprimir2:
 ;    	print notas           ; Imprimir el contenido del buffer
  ;   	print newline           ; Imprimir un salto de línea
     	ret
+error_abrir:
+	print msg_error_abrir
+	print newline
+	exit 
 
+
+error_leer:
+	print msg_error_leer
+	print newline
+	exit 
 
 ;;;;;;;;;;;;;EXTRAER VALORES DE CONFIGURACION;;;;;;;;;;;;;;
 extraer_valor:
@@ -168,6 +188,7 @@ extraer_valor:
     	mov [rdi], al
     	mov al, [config + r8 + 1]
     	mov [rdi + 1], al
+	mov byte [rdi + 2], 0
     	add r8, 1
     	mov [cont_config], r8w
     	ret
@@ -182,6 +203,7 @@ buscar_corchete:
     	jmp buscar_corchete			;loop
 error:
 	ret
+
 
 buscar_espacio:
     	mov r8w, [cont_config]		;misma logica de busqueda que buscar_corche nada mas
@@ -198,13 +220,12 @@ encontrado:
 contar_lineas:
 	mov qword [cont_lineas], 0		;conteo cant lineas
 	mov rcx, 0			;puntero al inicio del buffer
-	mov rbx, 0
+	mov rbx, 0			;indx de la linea
 	mov qword [cont_archivo], r12
-	mov rdx, 0
+	mov qword [long_lineas], 0	;primera linea empieza en cero
 	jmp contar_loop
 
 contar_loop:
-;	print array
 	cmp rcx, [cont_archivo]			;cant de bytes leidos == cant bytes del documento
 	je listo
 	mov al, [notas + rcx]				;documento leido
@@ -317,17 +338,17 @@ ordenamiento:	;r13 linea 1		r12 linea 2
 	mov rcx, r10
 	rep movsb
 
-;	print notas	
-;	print newline
 	
-	mov r14, [long_lineas + r8]
-	mov r15, [long_lineas + r9]
+	lea r14, [long_lineas + r8]
+	lea r15, [long_lineas + r9]
+	
 	
 	mov r10, [r14]
 	mov r11, [r15]
 cambio:
 	mov r14, [r11]
 	mov r15, [r10]
+
 
 	inc qword [cont_lineas1]			;para ver las otras lineas
 	inc qword [cont_lineas2]			;hay que seguir el loop
