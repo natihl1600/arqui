@@ -96,8 +96,8 @@ _start:
 
 	call ordenar_filas
 ;	print cont_lineas
-;	print newline
-	
+	print newline
+	print notas
 ;	print array
 
 	;final extraccion datos config
@@ -246,120 +246,102 @@ listo:
 
 
 ordenar_filas:
-	mov qword r13, [cont_lineas]			;r13 tiene cant total de lineas
-	mov qword r8, [cont_lineas1]			;r8 tiene el contador de linea 1
-	mov qword r9, [cont_lineas2]			;r9 tiene contador de linea 2
+	mov r13, [cont_lineas]
+;	dec r13
+	mov qword [contador], 1
 
-	mov qword rax, [cont_lineas]
-	mov qword rbx, [contador]
-	cmp rax, rbx					;pregunto si todas las lineas estan ordenadas
-	je full_ordenado				
-	cmp r9, r13					;pregunto si ya se revisaron todas y no esta
-	jge volver_a_empezar				;full ordenado
+outer_loop:
+	mov r8, 0
+	mov r9, 1
+	cmp qword [contador], r13
+	jge full_ordenado
+
+inner_loop:
+	cmp r9, r13
+	jge next_pass
+
 	
 	imul r8, r8, 8
-	imul r9, r9, 8					
+	imul r9, r9, 8					;aqu'i voy a optener las posiciones de inicio
+	mov r12, [long_lineas + r8]
+	mov r13, [long_lineas + r9]
+						;aqui calculo el largo de cada liena
+	mov r10, [long_lineas + r8 + 8]	;calculo largo de linea 1
+	sub r10, r12
+	dec r10 ;no tomo en cuenta espacio final
+	mov r11, [long_lineas + r9 + 8]	;calculo largo de linea 2
+	sub r11, r13
+	dec r11	;no tomo en cuenta espacio final
 
-	mov qword r10, [long_lineas + r8]		;byte final linea 1 (inicio 2)
-	mov qword r11, [long_lineas + r9]		;byte final linea 2 (inicio 3)
+	call compara_bytes
+	jne swap_lines
 
+next_inner:
+	inc r8
+	inc r9
+	jmp inner_loop
 
-	mov r12, [long_lineas + r8 - 8]			;inicio linea 1
-	mov r13, [long_lineas + r9 - 8]			;inicio linea 2 
-
-
-	sub r10, r12					;longitud linea 1
-	call negativo1
-
-	sub r11, r13					;longitud linea 2
-	call negativo2
-	
-
-	mov rcx, 0
-	jmp compara_bytes
-
-
-negativo1:
-	cmp r10, 0
-	jl cambiar1
-	ret
-
-cambiar1:
-	neg r10
-	ret
-
-negativo2:
-	cmp r11, 0
-	jl cambiar2
-	ret
-cambiar2:
-	neg r11
-	ret
-	
+next_pass:
+	inc qword [contador]
+	jmp outer_loop
 
 compara_bytes:
-	movzx r14, byte [notas + r12 + rcx]		;si encuentra byte diferente guarda la ubi
-	movzx r15, byte [notas + r13 + rcx]	
-
+	mov rcx, 0
+compare_loop:
+	cmp rcx, r10
+	jge same_or_shorter
+	cmp rcx, r11
+	jge greater
 	
-	cmp r15, r14					;comparo los bytes
-	je misma_letra					;si es la misma letra, avanza de byte
-	cmp r15, r14					;si no es la mis:>ma letra
-	jg mismo_orden					;si estan ordenadas
-
-
-	call ordenamiento				;ordeno si son diferentes
-	jmp ordenar_filas	
-
-volver_a_empezar:					;tengo que hacer el bubble varias veces
-	mov qword [cont_lineas1], 0			;hasta verificar que todo esta ordenado
-	mov qword [cont_lineas2], 1
-	mov qword [contador], 1
-	jmp ordenar_filas
-
-misma_letra:
+	movzx r14, byte [notas + r12 + rcx]
+	movzx r15, byte [notas + r13 + rcx]
+	cmp r15, r14
+	jg greater
+	jl less
 	inc rcx
-	jmp compara_bytes
+	jmp compare_loop
 
-ordenamiento:	;r13 linea 1		r12 linea 2
-		
-	lea rsi, [notas + r12]	
+same_or_shorter:
+	cmp r10, r11
+	jle equal
+	jmp greater
+greater:
+	mov rax, 1
+	ret
+less:
+	mov rax, -1
+	ret
+equal:
+	mov rax, 0
+	ret
+
+swap_lines:
+	mov r14, r12
+	mov r15, [long_lineas + r8 + 8]
+	mov rbx, r13
+	mov rbp, [long_lineas + r9 + 8]
+
+	lea rsi, [notas + r14]
 	lea rdi, [copia_linea]
-	mov rcx, r10
-	rep movsb	
-	
-	lea rsi, [notas + r13]	;ahora lo de rsi esta tamvbien escrito en rdi
-	lea rdi, [notas + r12]	;"rsi 2 veces"
-	mov rcx, r11
+	mov rcx, r15
+	sub rcx, r14
+	mov r10, rcx
 	rep movsb
 
-	lea rsi, [copia_linea]	;ahora debo copiar lo de copia_linea donde esta rsi
-	lea rdi, [notas + r13]	
+	lea rsi, [notas + rbx]
+	lea rdi, [notas + r14]
+	mov rcx, rbp
+	sub rcx, rbx
+	mov r11, rcx
+	rep movsb
+
+	lea rsi, [copia_linea]
+	lea rdi, [notas + r14]
+	add rdi, r11
 	mov rcx, r10
 	rep movsb
 
-	
-	lea r14, [long_lineas + r8]
-	lea r15, [long_lineas + r9]
-	
-	
-	mov r10, [r14]
-	mov r11, [r15]
-cambio:
-	mov r14, [r11]
-	mov r15, [r10]
-
-
-	inc qword [cont_lineas1]			;para ver las otras lineas
-	inc qword [cont_lineas2]			;hay que seguir el loop
-	mov qword [contador], 1
-	ret			
-
-mismo_orden:
-	inc qword [cont_lineas1]
-	inc qword [cont_lineas2]
-	inc qword [contador]
-	jmp ordenar_filas
+	jmp next_inner
 
 full_ordenado:	
 	ret
