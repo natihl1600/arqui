@@ -159,13 +159,18 @@ extraer_valor:
 buscar_corchete:
     mov r8w, word [cont_config]
     cmp r8w, 1000
-    jge error
+    jge error_config
     cmp byte [config + r8], '['
     je encontrado
+    cmp byte [config + r8], 0
+    je error_config
     inc word [cont_config]
     jmp buscar_corchete
-error:
-    ret
+
+error_config:
+    print msg_error_leer
+    print newline
+    exit
 
 buscar_espacio:
     mov r8w, [cont_config]
@@ -225,11 +230,13 @@ inner_loop:
     shl rax, 3
     mov r10, [long_lineas + rax + 8]
     sub r10, r12
+    jle invalid_length
     dec r10
     mov rax, r9
     shl rax, 3
     mov r11, [long_lineas + rax + 8]
     sub r11, r13
+    jle invalid_length
     dec r11
     call compara_bytes
     jne swap_lines
@@ -240,6 +247,9 @@ next_inner:
 next_pass:
     inc qword [contador]
     jmp outer_loop
+
+invalid_length:
+    jmp next_inner
 
 compara_bytes:
     mov rcx, 0
