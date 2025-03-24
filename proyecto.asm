@@ -9,7 +9,6 @@ section .data
 section .bss
     	config resb 1000               ; Buffer para almacenar el contenido del primer archivo
     	notas resb 1000              ; Buffer para almacenar el contenido del segundo archivo
-
 	filename1 resq 1000
 	filename2 resb 1000
 
@@ -35,6 +34,9 @@ section .text
     	global _start
 
 _start:
+	cmp qword [rsp], 3
+	jl arg_error
+	
 	mov word [cont_archivo], 0
 	mov word [cont_config], 0
 	mov qword [cont_lineas], 0
@@ -89,18 +91,9 @@ _start:
 	print newline
 
 	call contar_lineas
-;	print cont_config
-;	print newline
-;	movzx rax, word [cont_lineas]
-;	print rax
-
 	call ordenar_filas
-;	print cont_lineas
 	print newline
 	print notas
-;	print array
-
-	;final extraccion datos config
 	exit
 arg_error:
 	print msg_arg_error
@@ -130,9 +123,6 @@ abrir_leer_imprimir:
     	mov rax, 3              ; syscall: close
     	syscall
 
-    ; Imprimir el contenido del primer archivo
-  ;  	print config            ; Imprimir el contenido del buffer
-   ; 	print newline           ; Imprimir un salto de línea
     	ret
 
 segundo_archivo:
@@ -234,11 +224,17 @@ contar_loop:
 	je es_salto				;no, siguiente byte
 	jmp contar_loop				;si, voy a sumar al contador de lineas
 es_salto:
+	inc qword [cont_lineas]
 	mov qword [long_lineas + rbx * 8], rcx
 	inc rbx
-	inc qword [cont_lineas]
 	jmp contar_loop			
-listo:
+listo:	
+	cmp rcx, [cont_archivo]
+	je no_trailing_newline
+	ret
+no_trailing_newline:
+	inc qword [cont_lineas]
+	mov [long_lineas + rbx * 8], rcx
 	ret
 
 
@@ -247,8 +243,8 @@ listo:
 
 ordenar_filas:
 	mov r13, [cont_lineas]
-;	dec r13
-	mov qword [contador], 1
+	dec r13
+	mov qword [contador], 0
 
 outer_loop:
 	mov r8, 0
@@ -260,19 +256,26 @@ inner_loop:
 	cmp r9, r13
 	jge next_pass
 
+	mov rax, r8
+	shl rax, 3
+	mov r12, [long_lineas + rax]
 	
-	imul r8, r8, 8
-	imul r9, r9, 8					;aqu'i voy a optener las posiciones de inicio
-	mov r12, [long_lineas + r8]
-	mov r13, [long_lineas + r9]
-						;aqui calculo el largo de cada liena
-	mov r10, [long_lineas + r8 + 8]	;calculo largo de linea 1
+	mov rax, r9
+	shl rax, 3
+	mov r13, [long_lineas + rax]
+	
+	mov rax, r8
+	shl rax, 3
+	mov r10, [long_lineas + rax + 8]
 	sub r10, r12
-	dec r10 ;no tomo en cuenta espacio final
-	mov r11, [long_lineas + r9 + 8]	;calculo largo de linea 2
+	dec r10
+		
+	mov rax, r9
+	shl rax, 3
+	mov r11, [long_lineas + rax + 8]
 	sub r11, r13
-	dec r11	;no tomo en cuenta espacio final
-
+	dec r11
+	
 	call compara_bytes
 	jne swap_lines
 
@@ -282,7 +285,9 @@ next_inner:
 	jmp inner_loop
 
 next_pass:
-	inc qword [contador]
+	cmp qword [contador], r13
+	jmp full_ordenado
+	mov qword [contador], 0
 	jmp outer_loop
 
 compara_bytes:
@@ -295,7 +300,7 @@ compare_loop:
 	
 	movzx r14, byte [notas + r12 + rcx]
 	movzx r15, byte [notas + r13 + rcx]
-	cmp r15, r14
+	cmp r14, r15
 	jg greater
 	jl less
 	inc rcx
@@ -317,9 +322,13 @@ equal:
 
 swap_lines:
 	mov r14, r12
-	mov r15, [long_lineas + r8 + 8]
+	mov rax, r8
+	shl rax, 3
+	mov r15, [long_lineas + rax + 8]
 	mov rbx, r13
-	mov rbp, [long_lineas + r9 + 8]
+	mov rax, r9
+	shl rax, 3
+	mov rbp, [long_lineas + rax + 8]
 
 	lea rsi, [notas + r14]
 	lea rdi, [copia_linea]
@@ -341,6 +350,7 @@ swap_lines:
 	mov rcx, r10
 	rep movsb
 
+	mov qword [contador], 0
 	jmp next_inner
 
 full_ordenado:	
