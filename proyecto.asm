@@ -198,11 +198,10 @@ contar_lineas:
 	mov qword [cont_archivo], r12
 	mov rdx, 0
 primera_linea:
-	mov qword [long_lineas + rbx * 8], rcx
+	mov qword [long_lineas + rbx * 8], 0
 	inc rbx
-	inc qword [cont_lineas]	
+	inc qword [cont_lineas]
 	jmp contar_loop
-
 
 contar_loop:
 ;	print array
@@ -219,7 +218,6 @@ es_salto:
 	inc qword [cont_lineas]
 	jmp contar_loop			
 listo:
-	dec qword [cont_lineas]
 	ret
 
 
@@ -227,14 +225,12 @@ listo:
 
 ordenar_filas:
     mov rdi, [cont_lineas]  ; Total lines
-    dec rdi                ; Last line index to compare
+    sub rdi, 2                 ; Last line index to compare
     mov qword [contador], 0 ; Outer loop counter
 
 outer_loop:
     mov r8, 0               ; Line1 index
     mov r9, 1               ; Line2 index
-    cmp qword [contador], rdi
-    jge full_ordenado
 inner_loop:
     cmp r9, rdi
     jg next_pass
@@ -257,11 +253,12 @@ next_inner:
     inc r8
     inc r9
     jmp inner_loop
-next_pass:			;una pasada al exterior, ?reinicio contador para verificar?
+next_pass:
 	cmp qword [contador], rdi
-	jmp full_ordenado    
-	jmp reinicio
-reinicio:
+	je full_ordenado
+ 	jmp revisar_otra_vez
+
+revisar_otra_vez:
 	mov qword [contador], 0
 	jmp outer_loop
 
@@ -287,60 +284,64 @@ greater:
     mov rax, 1
     ret
 less:
-   	shr r8, 3
-	shr r9, 3
 	inc qword [contador]
-	jmp next_inner
-    ret
-equal:
-    mov rax, 0
-    ret
-
-swap_lines:
-    ; Save both lines’ start and end positions
-    mov r14, r12            ; Start of Line1
-    mov r15, [long_lineas + r8 + 8]  ; End of Line1 + 1
-    mov rbx, r13            ; Start of Line2
-    mov rbp, [long_lineas + r9 + 8]  ; End of Line2 + 1
-
-    ; Copy Line1 to copia_linea
-    lea rsi, [notas + r14]
-    lea rdi, [copia_linea]
-    mov rcx, r15
-    sub rcx, r14            ; Full length including \n
-    mov r10, rcx            ; Save Line1 length
-    rep movsb
-
-    ; Shift Line2 to Line1’s position
-    lea rsi, [notas + rbx]
-    lea rdi, [notas + r14]
-    mov rcx, rbp
-    sub rcx, rbx            ; Full length of Line2
-    mov r11, rcx            ; Save Line2 length
-    rep movsb
-
-    ; Copy Line1 to Line2’s new position
-    lea rsi, [copia_linea]
-    lea rdi, [notas + r14]
-    add rdi, r11            ; Position after shifted Line2
-    mov rcx, r10
-    rep movsb
-
-	mov rax, [long_lineas + r8]
-	mov rbx, [long_lineas + r9]
-		
-	mov [long_lineas + r8], rbx
-	mov [long_lineas + r9], rax
-
 	shr r8, 3
 	shr r9, 3
-	
+	jmp next_inner    
 
-	mov qword [contador], 0
+equal:
+	inc qword [contador]
+	shr r8, 3
+	shr r9, 3
+	jmp next_inner
+    	
+swap_lines:
+	;cambio lineas dentro del buffer
+    	mov r14, r12            		; inicio linea 1
+    	mov r15, [long_lineas + r8 + 8]  	; inicio linea 2
+    	mov rbx, r13            		; inicio linea 2
+    	mov r12, [long_lineas + r9 + 8]  	; final linea 2
+
+
+     	lea rsi, [notas + r14]
+    	lea rdi, [copia_linea]
+    	mov rcx, r15
+    	sub rcx, r14            
+    	mov r10, rcx            
+    	rep movsb
+
+       	lea rsi, [notas + rbx]
+    	lea rdi, [notas + r14]
+    	mov rcx, r12
+    	sub rcx, rbx            
+    	mov r11, rcx           
+    	rep movsb
+
+       	lea rsi, [copia_linea]
+    	lea rdi, [notas + r14]
+    	add rdi, r11            
+   	mov rcx, r10
+    	rep movsb
+
+	;cambio dirr en el array
+
+	mov rax, [long_lineas + r8]
+	mov rdx, [long_lineas + r9]
+	
+	mov [long_lineas + r8], rdx
+	mov [long_lineas + r9], rax
+
+	;vuelvo a indices de 0,1,2..nf.
+	
+	shr r8, 3	
+	shr r9, 3
+	
+	;ajusto los parametros necesarios	
+
+	mov qword [contador], 0		;como realic'e cambio el contador va a cero otra vez
 	mov rdi, [cont_lineas]
-	dec rdi
-	;necesito dividir entre 8 los indices
-    jmp next_inner
+	sub rdi, 2
+ 	jmp next_inner
 
 full_ordenado:
     ret
