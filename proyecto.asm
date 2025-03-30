@@ -8,11 +8,14 @@ section .data
 	msg_error_leer db "Error al leer el archivo", 0
 
 section .bss
-    	config resb 256               ; Buffer para almacenar el contenido del primer archivo
-    	notas resb 256              ; Buffer para almacenar el contenido del segundo archivo
+    	config resb 1000               ; Buffer para almacenar el contenido del primer archivo
+    	notas resb 1000              ; Buffer para almacenar el contenido del segundo archivo
+
+	filename1 resq 1000
+	filename2 resb 1000
 
 	copia_linea resq 100
-	long_lineas resq 100
+	long_lineas resq 1500
 	longitud_1 resq 25 
 	longitud_2 resq 25
 	
@@ -96,7 +99,7 @@ orden:
 ;	print cont_lineas
 	print newline
 	print notas
-	print newline
+;	print array
 
 	;final extraccion datos config
 	exit
@@ -121,6 +124,8 @@ abrir_leer_imprimir:
     	syscall
 
     ; Imprimir el contenido del primer archivo
+  ;  	print config            ; Imprimir el contenido del buffer
+   ; 	print newline           ; Imprimir un salto de línea
     	ret
 
 segundo_archivo:
@@ -168,15 +173,15 @@ extraer_valor:
     	ret
 	
 buscar_corchete:
-    	mov r8w, word [cont_config]			;estamos usando 16 bits para buscar
-    	cmp byte [config + r8], '['			;comparo hasta encontrar corchete
-    	je encontrado					;si lo encuentro tengo funcion de retorno
-    	inc word [cont_config]				;si no se ha encontrado aumento contador
-    	jmp buscar_corchete				;loop
+    	mov r8w, word [cont_config]		;estamos usando 16 bits para buscar
+    	cmp byte [config + r8], '['		;comparo hasta encontrar corchete
+    	je encontrado			;si lo encuentro tengo funcion de retorno
+    	inc word [cont_config]		;si no se ha encontrado aumento contador
+    	jmp buscar_corchete			;loop
 
 buscar_espacio:
-    	mov r8w, [cont_config]				;misma logica de busqueda que buscar_corche nada mas
-    	cmp byte [config + r8], 32			;que con un espacio
+    	mov r8w, [cont_config]		;misma logica de busqueda que buscar_corche nada mas
+    	cmp byte [config + r8], 32		;que con un espacio
     	je encontrado
     	inc word [cont_config]
     	jmp buscar_espacio
@@ -185,64 +190,64 @@ encontrado:
     	ret
 
 
-;;;;;;;;;;;OBTENER CANT DE LINEAS A LEER;;;;;;;;;;;;;
+;;;;;;;;;;;OBTENER CANT DE LINEAS A LEER;;;;;;;;;;;;; ya esta hecho
 contar_lineas:
-	mov qword [cont_lineas], 0			;conteo cant lineas
-	mov rcx, cont_lineas				;mas facil manejar registros que data
-	mov rsi, notas					;puntero al inicio del buffer
-	mov rbx, 0					;indice array long_lineas
+	mov qword [cont_lineas], 0		;conteo cant lineas
+	mov rcx, 0			;puntero al inicio del buffer
+	mov rbx, 0
+	mov qword [cont_archivo], r12
+	mov rdx, 0
+primera_linea:
+	mov qword [long_lineas + rbx * 8], rcx
+	inc rbx
+	inc qword [cont_lineas]	
+	jmp contar_loop
+
 
 contar_loop:
-	cmp byte [rsi], 0			;null del txt
-	je listo				;termina de guardar en el array
-
-	test rcx, rcx				;guardo la primera direccion
-	jz es_salto				;esto es cuando rcx = 0 estricto
-
-	cmp byte [rsi - 1], 10			;byte anterior al que leo, saber si es salto de pag
-	jne no_es_salto				;para guardar el inicio de la linea
-
+;	print array
+	cmp rcx, [cont_archivo]			;cant de bytes leidos == cant bytes del documento
+	je listo
+	mov al, [notas + rcx]				;documento leido
+	inc rcx
+	cmp al, 10d		;byte es un cambio de linea?
+	je es_salto				;no, siguiente byte
+	jmp contar_loop				;si, voy a sumar al contador de lineas
 es_salto:
-	mov qword [long_lineas + rbx * 8], rsi	;guardo la direccion de la linea en el array
-	inc rbx					;incremento indice para buscar otra linea
-	inc qword [cont_lineas]			;incremento cont de linea
-	inc rcx					;aumento cont de lineas
-	jmp contar_loop	
-
-no_es_salto:
-	inc rsi					;si no hay salto solo busco en otro 
-	jmp contar_loop				;byte y asi hasta encontrar salto
-
+	mov qword [long_lineas + rbx * 8], rcx
+	inc rbx
+	inc qword [cont_lineas]
+	jmp contar_loop			
 listo:
-	mov [cont_lineas], ecx
+	dec qword [cont_lineas]
 	ret
 
 
 ;;;;;;;ALFABETICO;;;;;;;;;	ordenamiento, intercambio de filas
 
 ordenar_filas:
-    mov r13, [cont_lineas]  ; Total lines
-;    dec r13                 ; Last line index to compare
-    mov qword [contador], 1 ; Outer loop counter
+    mov rdi, [cont_lineas]  ; Total lines
+    dec rdi                ; Last line index to compare
+    mov qword [contador], 0 ; Outer loop counter
 
 outer_loop:
     mov r8, 0               ; Line1 index
     mov r9, 1               ; Line2 index
-    cmp qword [contador], r13
+    cmp qword [contador], rdi
     jge full_ordenado
 inner_loop:
-    cmp r9, r13
-    jge next_pass
+    cmp r9, rdi
+    jg next_pass
     ; Get start positions
 	imul r8, r8, 8
 	imul r9, r9, 8
-    mov r12, [long_lineas + r8 - 8]  ; Start of line1
-    mov r13, [long_lineas + r9 - 8]  ; Start of line2
+    mov r12, [long_lineas + r8]  ; Start of line1
+    mov r13, [long_lineas + r9]  ; Start of line2
     ; Calculate lengths
-    mov r10, [long_lineas + r8] ; Next line start
+    mov r10, [long_lineas + r8 + 8] ; Next line start
     sub r10, r12
     dec r10                 ; Exclude \n
-    mov r11, [long_lineas + r9]
+    mov r11, [long_lineas + r9 + 8]
     sub r11, r13
     dec r11
     ; Compare strings
@@ -252,9 +257,13 @@ next_inner:
     inc r8
     inc r9
     jmp inner_loop
-next_pass:
-    inc qword [contador]
-    jmp outer_loop
+next_pass:			;una pasada al exterior, ?reinicio contador para verificar?
+	cmp qword [contador], rdi
+	jmp full_ordenado    
+	jmp reinicio
+reinicio:
+	mov qword [contador], 0
+	jmp outer_loop
 
 compara_bytes:
     mov rcx, 0
@@ -278,7 +287,10 @@ greater:
     mov rax, 1
     ret
 less:
-    mov rax, -1
+   	shr r8, 3
+	shr r9, 3
+	inc qword [contador]
+	jmp next_inner
     ret
 equal:
     mov rax, 0
@@ -287,10 +299,9 @@ equal:
 swap_lines:
     ; Save both lines’ start and end positions
     mov r14, r12            ; Start of Line1
-    mov r15, [long_lineas + r8]  ; End of Line1 + 1
+    mov r15, [long_lineas + r8 + 8]  ; End of Line1 + 1
     mov rbx, r13            ; Start of Line2
-    mov r12, [long_lineas + r9]  ; End of Line2 + 1
-
+    mov rbp, [long_lineas + r9 + 8]  ; End of Line2 + 1
 
     ; Copy Line1 to copia_linea
     lea rsi, [notas + r14]
@@ -303,7 +314,7 @@ swap_lines:
     ; Shift Line2 to Line1’s position
     lea rsi, [notas + rbx]
     lea rdi, [notas + r14]
-    mov rcx, r12
+    mov rcx, rbp
     sub rcx, rbx            ; Full length of Line2
     mov r11, rcx            ; Save Line2 length
     rep movsb
@@ -315,6 +326,20 @@ swap_lines:
     mov rcx, r10
     rep movsb
 
+	mov rax, [long_lineas + r8]
+	mov rbx, [long_lineas + r9]
+		
+	mov [long_lineas + r8], rbx
+	mov [long_lineas + r9], rax
+
+	shr r8, 3
+	shr r9, 3
+	
+
+	mov qword [contador], 0
+	mov rdi, [cont_lineas]
+	dec rdi
+	;necesito dividir entre 8 los indices
     jmp next_inner
 
 full_ordenado:
@@ -323,4 +348,3 @@ full_ordenado:
 salir:
     ; Salir del programa
 	exit    
-
