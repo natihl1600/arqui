@@ -177,6 +177,51 @@ buscar_espacio:
 encontrado:
     	ret
 
+;;;;;;;;;;;;EXTRAER VALORES PARA ORDENAMIENTO NUM;;;;;;;;;;;;;;;;
+
+;_____________________inicio: extraer nota de una línea
+; Entrada: rax = dirección de inicio de la línea (e.g., "Ana Ramirez [92]")
+; Salida: r14 = valor numérico de la nota (e.g., 92)
+extraer_nota:
+    mov r14, 0                  ; Inicializar el valor numérico de la nota
+    mov r12, rax                ; Copiar la dirección de inicio a r12 para recorrer la línea
+
+buscar_corchete_izq:
+    mov al, [r12]               ; Leer el carácter actual
+    cmp al, '['                 ; ¿Es un corchete izquierdo?
+    je found_corchete_izq       ; Si sí, continuar
+    inc r12                     ; Avanzar al siguiente carácter
+    jmp buscar_corchete_izq     ; Repetir
+
+found_corchete_izq:
+    inc r12                     ; Avanzar al primer dígito después de '['
+    mov r14, 0                  ; Reiniciar el acumulador numérico
+
+convertir_numero:
+    mov al, [r12]               ; Leer el carácter actual
+    cmp al, ']'                 ; ¿Es un corchete derecho?
+    je fin_nota                 ; Si sí, terminar conversión
+;    cmp al, '0'                 ; ¿Es menor que '0'?
+;    jl error_nota               ; Si sí, error
+ ;   cmp al, '9'                 ; ¿Es mayor que '9'?
+  ;  jg error_nota               ; Si sí, error
+
+    ; Convertir carácter ASCII a valor numérico (e.g., '9' -> 9)
+    sub al, '0'                 ; Convertir ASCII a número
+    movzx r13, al               ; Mover el dígito a r13 (zero-extend)
+    imul r14, r14, 10           ; Multiplicar el acumulador por 10 (desplazar dígitos)
+    add r14, r13                ; Sumar el nuevo dígito
+    inc r12                     ; Avanzar al siguiente carácter
+    jmp convertir_numero        ; Repetir
+
+error_nota:
+    mov r14, 0                  ; En caso de error, devolver 0 (o podrías manejar esto de otra forma)
+    ret
+
+fin_nota:
+    ret
+;_____________________fin: extraer nota de una línea
+
 
 ;;;;;;;;;;;OBTENER CANT DE LINEAS A LEER;;;;;;;;;;;;; ya esta hecho
 find_lines:
@@ -225,7 +270,6 @@ end_no_lines:
 
 ;;;;;;;ALFABETICO;;;;;;;;;	ordenamiento, intercambio de filas
 
-
 ordenar_filas:
     	mov rcx, [cont_lineas]     	;cant de lineas del doc 
     	cmp rcx, 1                  	;si solo hay 1 linea en doc no hay nada que 
@@ -252,13 +296,29 @@ inner_loop:
     	mov rax, [long_lineas + r8] 	;Dirección de inicio de la línea 1
     	mov rbx, [long_lineas + r9] 	;Dirección de inicio de la línea 2
 
+	cmp byte [ordenamientos], 97
+	je alpha
+	jmp num
+
+alpha:
     	mov dl, [rax]               	;Primer carácter de la línea 1
     	mov dh, [rbx]               	;Primer carácter de la línea 2
     	cmp dl, dh                  	;Comparar caracteres
     	jle no_swap                 	;Si línea 1 <= línea 2, no intercambiar
+	jg dirr
 
- ;   	mov byte [swap_flag], 1     	;Marcar intercambio
-    	mov rax, [long_lineas + r8] 	;Cargar dirección de línea 1
+num:
+	call extraer_nota		;rax ya tiene direccion de primera linea
+	mov r11, r14			;primera nota extraida, guardada en r11
+	mov rax, rbx			;direccion segunda linea
+	call extraer_nota
+	mov r13, r14			;segunda nota extraida, guardada en r15
+		
+	cmp r11, r13
+	jle no_swap
+	
+dirr:
+     	mov rax, [long_lineas + r8] 	;Cargar dirección de línea 1
     	mov rbx, [long_lineas + r9] 	;Cargar dirección de línea 2
     	mov [long_lineas + r8], rbx 	;Mover línea 2 a posición de línea 1
     	mov [long_lineas + r9], rax 	;Mover línea 1 a posición de línea 2
@@ -278,13 +338,13 @@ next_pass:
 full_ordenado:
     ret
 
-
+;;;;;;;;;NUMERICO;;;;;;;;;;;;;;
 
 ;_____________________inicio: impresión byte por byte de las líneas ordenadas
 ; Imprime cada línea en long_lineas carácter por carácter
 print_ordered:
     	mov r12, 0                  	;Índice inicial en long_lineas
-
+				;por alguna razon con r11, mi intento incial, no funciona
 print_line_loop:
     	mov r12, [long_lineas + r10 * 8] ; rsi = dirección de inicio de la línea actual
 	call imprimir_byte
