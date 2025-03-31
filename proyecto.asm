@@ -8,6 +8,8 @@ section .data
 	msg_error_leer db "Error al leer el archivo", 0
 
 section .bss
+	swap_flag resb 1
+	
     	config resb 1000               ; Buffer para almacenar el contenido del primer archivo
     	notas resb 1000              ; Buffer para almacenar el contenido del segundo archivo
 
@@ -88,20 +90,12 @@ _start:
 	print newline
     print ordenamientos
 	print newline
-lineas:
-	call contar_lineas
-;	print cont_config
-;	print newline
-;	movzx rax, word [cont_lineas]
-;	print rax
-orden:
-	call ordenar_filas
-;	print cont_lineas
-	print newline
-	print notas
-;	print array
 
-	;final extraccion datos config
+	call find_lines
+	call ordenar_filas
+	print newline
+	call print_ordered
+
 	exit
 
 abrir_leer_imprimir:
@@ -123,9 +117,6 @@ abrir_leer_imprimir:
     	mov rax, 3              ; syscall: close
     	syscall
 
-    ; Imprimir el contenido del primer archivo
-  ;  	print config            ; Imprimir el contenido del buffer
-   ; 	print newline           ; Imprimir un salto de línea
     	ret
 
 segundo_archivo:
@@ -153,9 +144,6 @@ abrir_leer_imprimir2:
     	mov rax, 3              ; syscall: close
     	syscall
 
-    ; Imprimir el contenido del segundo archivo
-;    	print notas           ; Imprimir el contenido del buffer
- ;   	print newline           ; Imprimir un salto de línea
     	ret
 
 
@@ -191,161 +179,139 @@ encontrado:
 
 
 ;;;;;;;;;;;OBTENER CANT DE LINEAS A LEER;;;;;;;;;;;;; ya esta hecho
-contar_lineas:
-	mov qword [cont_lineas], 0		;conteo cant lineas
-	mov rcx, 0			;puntero al inicio del buffer
-	mov rbx, 0
-	mov qword [cont_archivo], r12
-	mov rdx, 0
-primera_linea:
-	mov qword [long_lineas + rbx * 8], 0
-	inc rbx
-	inc qword [cont_lineas]
-	jmp contar_loop
+find_lines:
+	mov [cont_archivo], r12
+    	mov rsi, notas              	; rsi = puntero al inicio del buffer notas
+    	xor rcx, rcx                	; rcx = contador de líneas
+    	xor rdx, rdx                	; rdx = índice para long_lineas
+    	mov qword [cont_lineas], 0  	; Reiniciar contador de líneas
+    	mov r12, [cont_archivo]     	; r12 = número de bytes leídos
+    	mov r13, 0                  	; r13 = índice en el buffer
 
-contar_loop:
-;	print array
-	cmp rcx, [cont_archivo]			;cant de bytes leidos == cant bytes del documento
-	je listo
-	mov al, [notas + rcx]				;documento leido
-	inc rcx
-	cmp al, 10d		;byte es un cambio de linea?
-	je es_salto				;no, siguiente byte
-	jmp contar_loop				;si, voy a sumar al contador de lineas
-es_salto:
-	mov qword [long_lineas + rbx * 8], rcx
-	inc rbx
-	inc qword [cont_lineas]
-	jmp contar_loop			
-listo:
-	ret
+find_lines_loop:
+    	cmp r13, r12                	; ¿Fin del buffer?
+    	jge find_lines_end          	; Si sí, terminar
 
+    	test rcx, rcx               	; ¿Es la primera línea?
+    	jz store_line               	; Si sí, almacenar
+
+    	cmp byte [rsi - 1], 10      	; ¿Carácter anterior es '\n'?
+    	jne skip_store              	; Si no, saltar
+
+store_line:
+    	mov [long_lineas + rdx * 8], rsi ; Guardar dirección de inicio
+    	inc rdx                     	; Incrementar índice
+    	inc rcx                     	; Incrementar contador de líneas
+    	cmp rdx, 1500               	; ¿Límite de long_lineas?
+    	jge find_lines_end          	; Si sí, terminar
+
+skip_store:
+    	inc rsi                     	; Avanzar al siguiente carácter
+    	inc r13                     	; Avanzar índice en el buffer
+    	jmp find_lines_loop         	; Repetir
+
+find_lines_end:
+    	cmp r13, 0                 	 ; ¿Buffer vacío?
+    	je end_no_lines
+    	cmp byte [rsi - 1], 10      	; ¿Último carácter es '\n'?
+    	je end_no_lines             	; Si sí, no hay línea adicional
+    	mov [long_lineas + rdx * 8], rsi ; Guardar última línea
+    	inc rcx                     	; Contar última línea
+    	inc rdx	
+
+end_no_lines:
+    	mov [cont_lineas], rcx      ; Guardar número total de líneas
+    	ret
 
 ;;;;;;;ALFABETICO;;;;;;;;;	ordenamiento, intercambio de filas
 
+
 ordenar_filas:
-    mov rdi, [cont_lineas]  ; Total lines
-    sub rdi, 2                 ; Last line index to compare
-    mov qword [contador], 0 ; Outer loop counter
+    	mov rcx, [cont_lineas]     	;cant de lineas del doc 
+    	cmp rcx, 1                  	;si solo hay 1 linea en doc no hay nada que 
+    	jle full_ordenado           	;ordenar
+	dec rcx				;necesito lineas-1 aciertos
+    	mov r15, 0                  	;contador de aciertos
+
 
 outer_loop:
-    mov r8, 0               ; Line1 index
-    mov r9, 1               ; Line2 index
+    	cmp r15, rcx			;Cantidad de aciertos debe ser igual a lineas-1
+    	je full_ordenado            	;Para poder ssalir del loop
+
+    	mov r15, 0     			;Reinicio contador de aciertos
+    	mov r8, 0                   	;reinicio indice a la primera linea
+
 inner_loop:
-    cmp r9, rdi
-    jg next_pass
-    ; Get start positions
-	imul r8, r8, 8
-	imul r9, r9, 8
-    mov r12, [long_lineas + r8]  ; Start of line1
-    mov r13, [long_lineas + r9]  ; Start of line2
-    ; Calculate lengths
-    mov r10, [long_lineas + r8 + 8] ; Next line start
-    sub r10, r12
-    dec r10                 ; Exclude \n
-    mov r11, [long_lineas + r9 + 8]
-    sub r11, r13
-    dec r11
-    ; Compare strings
-    call compara_bytes
-    jne swap_lines
-next_inner:
-    inc r8
-    inc r9
-    jmp inner_loop
+    	mov r9, r8                  	;Índice para la segunda línea = primera + 8
+    	add r9, 8
+    	mov rax, [cont_lineas]      	;Cargar número total de líneas
+    	shl rax, 3                  	;Multiplicar por 8 (tamaño de cada entrada)
+    	cmp r9, rax                 	;¿Llegamos al final del arreglo?
+    	jge next_pass               	;Si sí, terminar esta pasada
+
+    	mov rax, [long_lineas + r8] 	;Dirección de inicio de la línea 1
+    	mov rbx, [long_lineas + r9] 	;Dirección de inicio de la línea 2
+
+    	mov dl, [rax]               	;Primer carácter de la línea 1
+    	mov dh, [rbx]               	;Primer carácter de la línea 2
+    	cmp dl, dh                  	;Comparar caracteres
+    	jle no_swap                 	;Si línea 1 <= línea 2, no intercambiar
+
+ ;   	mov byte [swap_flag], 1     	;Marcar intercambio
+    	mov rax, [long_lineas + r8] 	;Cargar dirección de línea 1
+    	mov rbx, [long_lineas + r9] 	;Cargar dirección de línea 2
+    	mov [long_lineas + r8], rbx 	;Mover línea 2 a posición de línea 1
+    	mov [long_lineas + r9], rax 	;Mover línea 1 a posición de línea 2
+
+	mov r15, 0
+	add r8, 8
+	jmp inner_loop
+
+no_swap:
+    	add r8, 8                   	;Avanzar al siguiente par
+	inc r15
+    	jmp inner_loop              	;Repetir bucle interno
+
 next_pass:
-	cmp qword [contador], rdi
-	je full_ordenado
- 	jmp revisar_otra_vez
-
-revisar_otra_vez:
-	mov qword [contador], 0
-	jmp outer_loop
-
-compara_bytes:
-    mov rcx, 0
-compare_loop:
-    cmp rcx, r10
-    jge same_or_shorter
-    cmp rcx, r11
-    jge greater
-    movzx r14, byte [notas + r12 + rcx]
-    movzx r15, byte [notas + r13 + rcx]
-    cmp r14, r15
-    jg greater
-    jl less
-    inc rcx
-    jmp compare_loop
-same_or_shorter:
-    cmp r10, r11
-    jle equal
-    jmp greater
-greater:
-    mov rax, 1
-    ret
-less:
-	inc qword [contador]
-	shr r8, 3
-	shr r9, 3
-	jmp next_inner    
-
-equal:
-	inc qword [contador]
-	shr r8, 3
-	shr r9, 3
-	jmp next_inner
-    	
-swap_lines:
-	;cambio lineas dentro del buffer
-    	mov r14, r12            		; inicio linea 1
-    	mov r15, [long_lineas + r8 + 8]  	; inicio linea 2
-    	mov rbx, r13            		; inicio linea 2
-    	mov r12, [long_lineas + r9 + 8]  	; final linea 2
-
-
-     	lea rsi, [notas + r14]
-    	lea rdi, [copia_linea]
-    	mov rcx, r15
-    	sub rcx, r14            
-    	mov r10, rcx            
-    	rep movsb
-
-       	lea rsi, [notas + rbx]
-    	lea rdi, [notas + r14]
-    	mov rcx, r12
-    	sub rcx, rbx            
-    	mov r11, rcx           
-    	rep movsb
-
-       	lea rsi, [copia_linea]
-    	lea rdi, [notas + r14]
-    	add rdi, r11            
-   	mov rcx, r10
-    	rep movsb
-
-	;cambio dirr en el array
-
-	mov rax, [long_lineas + r8]
-	mov rdx, [long_lineas + r9]
-	
-	mov [long_lineas + r8], rdx
-	mov [long_lineas + r9], rax
-
-	;vuelvo a indices de 0,1,2..nf.
-	
-	shr r8, 3	
-	shr r9, 3
-	
-	;ajusto los parametros necesarios	
-
-	mov qword [contador], 0		;como realic'e cambio el contador va a cero otra vez
-	mov rdi, [cont_lineas]
-	sub rdi, 2
- 	jmp next_inner
+    	jmp outer_loop              	;Repetir hasta que no haya intercambios
 
 full_ordenado:
     ret
 
+
+
+;_____________________inicio: impresión byte por byte de las líneas ordenadas
+; Imprime cada línea en long_lineas carácter por carácter
+print_ordered:
+    	mov r12, 0                  	;Índice inicial en long_lineas
+
+print_line_loop:
+    	mov r12, [long_lineas + r10 * 8] ; rsi = dirección de inicio de la línea actual
+	call imprimir_byte
+	add r10, 1
+	
+	cmp r10, [long_lineas]
+	jb print_line_loop
+
+	ret
+
+imprimir_byte:
+	mov rax, 1			;aca por alguna razon no funciona print
+	mov rdi, 1
+	mov rsi, r12
+	mov rdx, 1
+	syscall	
+
+	mov al, [r12]
+	cmp al, 10			;verifico si ya es cambio de linea
+	je fin_linea
+	inc r12				;imprimo siguiente byte
+	jmp imprimir_byte	
+fin_linea:
+	ret
+
+
+
 salir:
-    ; Salir del programa
+    					; Salir del programa
 	exit    
